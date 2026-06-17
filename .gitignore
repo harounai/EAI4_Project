@@ -1,0 +1,15 @@
+.env
+.venv/
+artifacts/
+build/
+third_party/
+.vscode/settings.json
+__pycache__/
+*.pyc
+dataset/
+*.bmp
+data/
+data_accessory/
+toolchains/
+Project_EAI.pdf
+doc.md
