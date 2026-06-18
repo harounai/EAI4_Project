@@ -130,6 +130,7 @@ def make_model(num_classes: int) -> tf.keras.Model:
         include_top=False,
         weights="imagenet",
         include_preprocessing=False,
+        name="MobileNetV3Small",
     )
     base.trainable = False
 
@@ -195,7 +196,7 @@ def export_tflite(model: tf.keras.Model, artifacts_dir: Path,
     model.export(str(saved_model_dir))
 
     def representative_dataset():
-        for images, _ in calib_ds.take(10):
+        for images, _ in calib_ds.take(50):
             for i in range(len(images)):
                 yield [tf.expand_dims(images[i], 0)]
 
@@ -252,7 +253,7 @@ def main() -> int:
         print("\nWARNING: accuracy below 90%. Consider collecting more data.")
 
     print("\n--- Exporting TFLite (int8) ---")
-    tflite_path = export_tflite(model, artifacts_dir, "accessory_model", train_ds)
+    tflite_path = export_tflite(model, artifacts_dir, "accessory_model", val_ds)
 
     print("\n--- Saving metrics ---")
     metrics_path = artifacts_dir / "accessory_model_metrics.csv"

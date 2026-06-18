@@ -119,10 +119,11 @@ def make_pipelines(full_ds):
 # ---------------------------------------------------------------------------
 
 def make_model(num_classes: int) -> tf.keras.Model:
-    base = model.get_layer("mobilenetv2_1.00_224")
-    input_shape=(*IMAGE_SIZE, 3),
+    base = tf.keras.applications.MobileNetV2(
+        input_shape=(*IMAGE_SIZE, 3),
         include_top=False,
         weights="imagenet",
+        name="mobilenetv2_1.00_224",
     )
     base.trainable = False
 
@@ -188,7 +189,7 @@ def export_tflite(model: tf.keras.Model, artifacts_dir: Path,
     model.export(str(saved_model_dir))
 
     def representative_dataset():
-        for images, _ in calib_ds.take(10):
+        for images, _ in calib_ds.take(50):
             for i in range(len(images)):
                 yield [tf.expand_dims(images[i], 0)]
 
@@ -245,7 +246,7 @@ def main() -> int:
         print("\nWARNING: accuracy below 85%. Consider collecting more data or training longer.")
 
     print("\n--- Exporting TFLite (int8) ---")
-    tflite_path = export_tflite(model, artifacts_dir, "gesture_model", train_ds)
+    tflite_path = export_tflite(model, artifacts_dir, "gesture_model", val_ds)
 
     print("\n--- Saving metrics ---")
     metrics_path = artifacts_dir / "gesture_model_metrics.csv"
