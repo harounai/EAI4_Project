@@ -1,18 +1,25 @@
 #!/usr/bin/env python3
 """
-train_gesture.py
+train_accessory.py
+modified by Simone & Annalena after Mohamed & Vlad
 
-Gesture classifier for Rock-Paper-Scissors project.
-Input:  data/ folder with subfolders: neutral/, paper/, rock/, scissors/
-Output: artifacts/gesture_model.tflite  (int8 quantized)
-        artifacts/gesture_model.keras
-        artifacts/gesture_model_metrics.csv
+Binary accessory classifier for Rock-Paper-Scissors project.
+Input:  data_accessory/ folder with subfolders: absent/, present/
+Output: artifacts/accessory_model.tflite  (int8 quantized)
+        artifacts/accessory_model.keras
+        artifacts/accessory_model_metrics.csv
 
-Model:  MobileNetV2 fine-tuned on 224x224 RGB images.
-Preprocessing: pixel values scaled to [-1, 1] (MobileNetV2 standard).
+Model:  MobileNetV3-Small fine-tuned on 224x224 RGB images.
 
-IMPORTANT — this preprocessing contract must match C++ inference code in preprocess.h:
-    float val = (pixel / 127.5f) - 1.0f;
+Preprocessing: pixel values scaled to [0, 1] (MobileNetV3 standard).
+
+IMPORTANT - this preprocessing contract must match C++ inference code in preprocess_accessory.h:
+    float val = static_cast<float>(pixel) / 255.0f;
+
+Class order is alphabetical (image_dataset_from_directory):
+    0 = absent   (no accessory)
+    1 = present  (accessory visible)
+This must match model_classes.h: ACCESSORY_ABSENT=0, ACCESSORY_PRESENT=1
 """
 
 from __future__ import annotations
@@ -25,26 +32,28 @@ from pathlib import Path
 import numpy as np
 import tensorflow as tf
 
+import pandas as pd
+
+
 
 # ---------------------------------------------------------------------------
-# Constants — do not change without updating model_classes.h
+# Constants — must match model_classes.h
 # ---------------------------------------------------------------------------
 
-# Class order is alphabetical (how image_dataset_from_directory works).
-# 0=neutral, 1=paper, 2=rock, 3=scissors
-CLASS_NAMES = ["neutral", "paper", "rock", "scissors"]
+CLASS_NAMES = ["absent", "present"]
 NUM_CLASSES = len(CLASS_NAMES)
 
 IMAGE_SIZE = (224, 224)   # must match CaptureParameters in C++
 BATCH_SIZE = 4
+
 
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Train gesture classifier and export to TFLite.")
-    p.add_argument("--data-dir",        default="data")
+    p = argparse.ArgumentParser(description="Train accessory detector and export to TFLite.")
+    p.add_argument("--data-dir",        default="dataset")
     p.add_argument("--artifacts-dir",   default="artifacts")
     p.add_argument("--epochs",          type=int, default=20)
     p.add_argument("--unfreeze-epochs", type=int, default=10)
@@ -57,28 +66,84 @@ def parse_args() -> argparse.Namespace:
 # ---------------------------------------------------------------------------
 # Data loading — tf.data pipeline, no numpy loading into RAM
 # ---------------------------------------------------------------------------
+ACCESSORY_MAP = {
+    "absent": 0,
+    "present": 1,
+}
 
 def load_dataset(data_dir: Path, seed: int):
-    full_ds = tf.keras.utils.image_dataset_from_directory(
-        str(data_dir),
-        image_size=IMAGE_SIZE,
-        batch_size=BATCH_SIZE,
-        shuffle=True,
-        seed=seed,
-        label_mode="int",
-    )
 
-    found_classes = full_ds.class_names
-    if found_classes != CLASS_NAMES:
+    rows = []
+
+    for gesture_dir in sorted(data_dir.iterdir()):
+
+        if not gesture_dir.is_dir():
+            continue
+
+        for accessory_dir in sorted(gesture_dir.iterdir()):
+
+            if not accessory_dir.is_dir():
+                continue
+
+            accessory_label = (
+                "present"
+                if accessory_dir.name == "with"
+                else "absent"
+            )
+
+            for image_path in sorted(accessory_dir.glob("*.bmp")):
+
+                rows.append({
+                    "path": str(image_path),
+                    "label": ACCESSORY_MAP[accessory_label],
+                })
+
+    df = pd.DataFrame(rows)
+
+    print(f"Loaded {len(df)} images")
+
+    if len(df) == 0:
         raise ValueError(
-            f"Class order mismatch!\n"
-            f"  Expected: {CLASS_NAMES}\n"
-            f"  Got:      {found_classes}\n"
-            f"  Fix: rename folders to exactly: neutral/ paper/ rock/ scissors/"
+            f"No BMP images found in {data_dir}"
         )
 
-    print(f"Classes confirmed: {found_classes}")
-    return full_ds
+    paths = df["path"].values
+    labels = df["label"].values
+
+    ds = tf.data.Dataset.from_tensor_slices(
+        (paths, labels)
+    )
+
+    def load_image(path, label):
+
+        image = tf.io.read_file(path)
+        image = tf.image.decode_bmp(
+            image,
+            channels=3
+        )
+
+        image = tf.image.resize(
+            image,
+            IMAGE_SIZE
+        )
+
+        return image, label
+
+    ds = ds.map(
+        load_image,
+        num_parallel_calls=tf.data.AUTOTUNE
+    )
+
+    ds = ds.shuffle(
+        len(df),
+        seed=seed
+    )
+
+    ds = ds.batch(
+        BATCH_SIZE
+    )
+
+    return ds
 
 
 def make_pipelines(full_ds):
@@ -93,18 +158,19 @@ def make_pipelines(full_ds):
 
     augment = tf.keras.Sequential([
         tf.keras.layers.RandomFlip("horizontal"),
-        tf.keras.layers.RandomBrightness(0.15),
+        tf.keras.layers.RandomBrightness(0.2),
+        tf.keras.layers.RandomContrast(0.1),
     ])
 
     def preprocess(images, labels):
         images = tf.cast(images, tf.float32)
-        images = (images / 127.5) - 1.0
+        images = images / 255.0
         return images, labels
 
     def preprocess_and_augment(images, labels):
         images = tf.cast(images, tf.float32)
         images = augment(images, training=True)
-        images = (images / 127.5) - 1.0
+        images = images / 255.0
         return images, labels
 
     train_ds = train_ds.map(preprocess_and_augment, num_parallel_calls=tf.data.AUTOTUNE).prefetch(tf.data.AUTOTUNE)
@@ -119,22 +185,22 @@ def make_pipelines(full_ds):
 # ---------------------------------------------------------------------------
 
 def make_model(num_classes: int) -> tf.keras.Model:
-    base = tf.keras.applications.MobileNetV2(
+    base = tf.keras.applications.MobileNetV3Small(
         input_shape=(*IMAGE_SIZE, 3),
         include_top=False,
         weights="imagenet",
-        name="mobilenetv2_1.00_224",
+        include_preprocessing=False,
     )
     base.trainable = False
 
     inputs = tf.keras.Input(shape=(*IMAGE_SIZE, 3), name="image_input")
     x = base(inputs, training=False)
     x = tf.keras.layers.GlobalAveragePooling2D(name="gap")(x)
-    x = tf.keras.layers.Dense(128, activation="relu", name="dense1")(x)
+    x = tf.keras.layers.Dense(64, activation="relu", name="dense1")(x)
     x = tf.keras.layers.Dropout(0.3, name="dropout")(x)
     outputs = tf.keras.layers.Dense(num_classes, activation="softmax", name="output")(x)
 
-    model = tf.keras.Model(inputs, outputs, name="gesture_mobilenetv2")
+    model = tf.keras.Model(inputs, outputs, name="accessory_mobilenetv3small")
     model.compile(
         optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
         loss="sparse_categorical_crossentropy",
@@ -143,8 +209,8 @@ def make_model(num_classes: int) -> tf.keras.Model:
     return model
 
 
-def unfreeze_top_layers(model: tf.keras.Model, n_unfreeze: int = 30) -> None:
-    base = model.get_layer("mobilenetv2_1.00_224")
+def unfreeze_top_layers(model: tf.keras.Model, n_unfreeze: int = 20) -> None:
+    base = model.get_layer("MobileNetV3Small")
     base.trainable = True
     for layer in base.layers[:-n_unfreeze]:
         layer.trainable = False
@@ -234,7 +300,7 @@ def main() -> int:
               callbacks=make_callbacks(), verbose=2)
 
     print("\n--- Phase 2: fine-tune backbone ---")
-    unfreeze_top_layers(model, n_unfreeze=30)
+    unfreeze_top_layers(model, n_unfreeze=20)
     model.fit(train_ds, validation_data=val_ds, epochs=args.unfreeze_epochs,
               callbacks=make_callbacks(), verbose=2)
 
@@ -242,14 +308,14 @@ def main() -> int:
     loss, acc = model.evaluate(test_ds, verbose=0)
     print(f"Test loss: {loss:.4f}  Test accuracy: {acc*100:.2f}%")
 
-    if acc < 0.85:
-        print("\nWARNING: accuracy below 85%. Consider collecting more data or training longer.")
+    if acc < 0.90:
+        print("\nWARNING: accuracy below 90%. Consider collecting more data.")
 
     print("\n--- Exporting TFLite (int8) ---")
-    tflite_path = export_tflite(model, artifacts_dir, "gesture_model", val_ds)
+    tflite_path = export_tflite(model, artifacts_dir, "accessory_model", train_ds)
 
     print("\n--- Saving metrics ---")
-    metrics_path = artifacts_dir / "gesture_model_metrics.csv"
+    metrics_path = artifacts_dir / "accessory_model_metrics.csv"
     with open(metrics_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=["metric", "value"])
         writer.writeheader()
@@ -257,10 +323,8 @@ def main() -> int:
             {"metric": "test_accuracy_keras", "value": f"{acc:.4f}"},
             {"metric": "test_loss",           "value": f"{loss:.4f}"},
             {"metric": "tflite_size_kb",      "value": f"{tflite_path.stat().st_size/1024:.1f}"},
-            {"metric": "class_0", "value": CLASS_NAMES[0]},
-            {"metric": "class_1", "value": CLASS_NAMES[1]},
-            {"metric": "class_2", "value": CLASS_NAMES[2]},
-            {"metric": "class_3", "value": CLASS_NAMES[3]},
+            {"metric": "class_0",             "value": CLASS_NAMES[0]},
+            {"metric": "class_1",             "value": CLASS_NAMES[1]},
         ])
 
     print(f"\n=== Done ===")

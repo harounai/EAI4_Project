@@ -41,6 +41,39 @@ constexpr std::uint8_t kErrorPattern[8] = {
     0b10000001,
 };
 
+constexpr std::uint8_t kRockPattern[8] = {
+    0b00000000,
+    0b00000000,
+    0b00111000,
+    0b01111110,
+    0b01111110,
+    0b00111110,
+    0b00000000,
+    0b00000000
+};
+
+constexpr std::uint8_t kPaperPattern[8] = {
+    0b00000000,
+    0b00001000,
+    0b00011100,
+    0b00011110,
+    0b01011110,
+    0b00111110,
+    0b00011110,
+    0b00001100
+};
+
+constexpr std::uint8_t kScissorsPattern[8] = {
+    0b00000000,
+    0b01000010,
+    0b01000010,
+    0b00100100,
+    0b00011000,
+    0b01011010,
+    0b10100101,
+    0b01000010
+};
+
 std::string Trim(std::string value) {
   while (!value.empty() && (value.back() == '\n' || value.back() == '\r' || value.back() == ' ' || value.back() == '\t')) {
     value.pop_back();
@@ -191,4 +224,78 @@ void SenseHatDisplay::Clear() {
       *pixel = 0x0000U;
     }
   }
+}
+
+void SenseHatDisplay::FillColor(
+    std::uint8_t r,
+    std::uint8_t g,
+    std::uint8_t b)
+{
+    if (!available_ || framebuffer_ == nullptr)
+        return;
+
+    const std::uint16_t color =
+        MakeRgb565(r, g, b);
+
+    for (int y = 0; y < 8; ++y)
+    {
+        for (int x = 0; x < 8; ++x)
+        {
+            auto* pixel =
+                reinterpret_cast<std::uint16_t*>(
+                    framebuffer_ +
+                    y * line_length_ +
+                    x * 2);
+
+            *pixel = color;
+        }
+    }
+}
+
+bool SenseHatDisplay::ShowCountdownDigit(int digit)
+{
+    if (digit < 1 || digit > 3)
+        return false;
+
+    WritePattern(
+        kDigitPatterns[digit],
+        MakeRgb565(255,255,255));
+
+    return true;
+}
+
+void SenseHatDisplay::ShowRock()
+{
+    WritePattern(
+        kRockPattern,
+        MakeRgb565(255,255,255));
+}
+
+void SenseHatDisplay::ShowPaper()
+{
+    WritePattern(
+        kPaperPattern,
+        MakeRgb565(255,255,255));
+}
+
+void SenseHatDisplay::ShowScissors()
+{
+    WritePattern(
+        kScissorsPattern,
+        MakeRgb565(255,255,255));
+}
+
+void SenseHatDisplay::FillGreen()
+{
+    FillColor(0,255,0);
+}
+
+void SenseHatDisplay::FillRed()
+{
+    FillColor(255,0,0);
+}
+
+void SenseHatDisplay::FillBlue()
+{
+    FillColor(0,0,255);
 }

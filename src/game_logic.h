@@ -1,10 +1,11 @@
 #pragma once
+#include "model_classes.h"
 
 enum class Gesture {
-    ROCK,
-    PAPER,
-    SCISSORS,
-    NEUTRAL
+    NEUTRAL  = gesture::NEUTRAL,
+    PAPER    = gesture::PAPER,
+    ROCK     = gesture::ROCK,
+    SCISSORS = gesture::SCISSORS
 };
 
 enum class Outcome {

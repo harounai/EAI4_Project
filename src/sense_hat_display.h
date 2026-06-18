@@ -14,6 +14,16 @@ class SenseHatDisplay {
   bool ShowDigit(int digit, float confidence);
   void ShowErrorMarker();
   void Clear();
+  bool ShowCountdownDigit(int digit);
+
+  void ShowRock();
+  void ShowPaper();
+  void ShowScissors();
+
+  void FillGreen();
+  void FillRed();
+  void FillBlue();
+  
 
  private:
   bool OpenFramebuffer();
@@ -26,4 +36,10 @@ class SenseHatDisplay {
   int line_length_ = 0;
   bool available_ = false;
   std::string error_message_;
+
+  void FillColor(
+    std::uint8_t r,
+    std::uint8_t g,
+    std::uint8_t b);
+
 };

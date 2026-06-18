@@ -45,13 +45,20 @@ $(VENV_STAMP): requirements.txt
 	"$(PIP_BIN)" install -r requirements.txt
 	touch "$@"
 
-$(GESTURE_MODEL): src/train_gesture.py requirements.txt $(VENV_STAMP) | $(ARTIFACT_DIR_STAMP)
-	"$(PYTHON_BIN)" src/train_gesture.py --artifacts-dir "$(ARTIFACT_DIR)" $(TRAIN_ARGS)
+$(GESTURE_MODEL): scripts/train_gesture.py requirements.txt $(VENV_STAMP) | $(ARTIFACT_DIR_STAMP)
+	"$(PYTHON_BIN)" scripts/train_gesture.py --artifacts-dir "$(ARTIFACT_DIR)" $(TRAIN_ARGS)
 
-$(ACCESSORY_MODEL): src/train_accessory.py requirements.txt $(VENV_STAMP) | $(ARTIFACT_DIR_STAMP)
-	"$(PYTHON_BIN)" src/train_accessory.py --artifacts-dir "$(ARTIFACT_DIR)" $(TRAIN_ARGS)
+$(ACCESSORY_MODEL): scripts/train_accessory.py requirements.txt $(VENV_STAMP) | $(ARTIFACT_DIR_STAMP)
+	"$(PYTHON_BIN)" scripts/train_accessory.py --artifacts-dir "$(ARTIFACT_DIR)" $(TRAIN_ARGS)
 
-train: $(GESTURE_MODEL) $(ACCESSORY_MODEL)
+.PHONY: train
+
+train:
+	"$(PYTHON_BIN)" scripts/train_gesture.py \
+		--artifacts-dir "$(ARTIFACT_DIR)" $(TRAIN_ARGS)
+
+	"$(PYTHON_BIN)" scripts/train_accessory.py \
+		--artifacts-dir "$(ARTIFACT_DIR)" $(TRAIN_ARGS)
 
 $(TFLITE_READY): scripts/ensure_tflite_source.sh .env
 	bash scripts/ensure_tflite_source.sh

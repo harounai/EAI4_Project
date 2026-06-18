@@ -13,6 +13,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <iostream>
 
 #include "tensorflow/lite/interpreter.h"
 #include "tensorflow/lite/interpreter_builder.h"
@@ -104,6 +105,10 @@ bool TfliteImageClassifier::Load(const std::string& model_path) {
         error_message_ = "Failed to allocate tensors.";
         return false;
     }
+
+    // Log success.
+    std::cout << "Model loaded successfully: "
+          << model_path << std::endl;
 
     // Exactly one input and one output.
     if (impl_->interpreter->inputs().size() != 1) {

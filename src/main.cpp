@@ -14,6 +14,18 @@
 
 rpicam::CaptureParameters params;
 
+const char* GestureName(int idx)
+{
+    switch (idx)
+    {
+        case 0: return "NEUTRAL";
+        case 1: return "PAPER";
+        case 2: return "ROCK";
+        case 3: return "SCISSORS";
+        default: return "UNKNOWN";
+    }
+}
+
 int main()
 {
     // try {
@@ -48,20 +60,31 @@ int main()
     //     return 1;
     // }
 
+    // helper class to convert gesture index to string for logging
+
     rpicam::RpiCameraCapture camera(params);
 
     TfliteImageClassifier gesture_classifier(
         gesture::GESTURE_MODEL_PATH,
         gesture::NUM_GESTURE_CLASSES);
 
+    std::cout << "Gesture classifier loaded successfully." << std::endl;
+
     TfliteImageClassifier accessory_classifier(
         gesture::ACCESSORY_MODEL_PATH,
         gesture::NUM_ACCESSORY_CLASSES);
 
+    std::cout << "Accessory classifier loaded successfully." << std::endl;
+
     SenseHatDisplay display;
+
+    std::cout << "Display created" << std::endl;
+
+    std::cout << "Entering loop" << std::endl;
 
 while (true)
 {
+    std::cout << "Starting new round..." << std::endl;
 
     display.ShowCountdownDigit(3);
     std::this_thread::sleep_for(
@@ -81,44 +104,84 @@ while (true)
     std::this_thread::sleep_for(
     std::chrono::milliseconds(200));
 
+    std::cout << "Before currentFrame()" << std::endl;
+
     auto frame = camera.currentFrame();
 
+    std::cout << "After currentFrame()" << std::endl;
+
+    // Check if the frame is valid
     if (!frame)
     {
         display.ShowErrorMarker();
+        // std::cerr << "Error: Failed to capture frame." << std::endl;
         return 1;
+    }
+    else
+    {
+        std::cout << "Captured frame successfully!" << std::endl;
     }
 
     auto gesture_input =
         preprocess::frame_to_float(*frame);
+    // Check if the gesture input is valid
+    if (gesture_input.empty())
+    {
+        display.ShowErrorMarker();
+        std::cerr << "Error: Gesture input is empty." << std::endl;
+        return 1;
+    }
 
     auto gesture_prediction =
         gesture_classifier.Predict(gesture_input);
+    // Check if the gesture prediction is valid
+    if (gesture_prediction.predicted_class < 0 || gesture_prediction.predicted_class >= gesture::NUM_GESTURE_CLASSES)
+    {
+        display.ShowErrorMarker();
+        std::cerr << "Error: Invalid gesture prediction class index: "
+                  << gesture_prediction.predicted_class << std::endl;
+        return 1;
+    }
 
     auto accessory_input =
         preprocess_accessory::frame_to_float(*frame);
+    // Check if the accessory input is valid
+    if (accessory_input.empty())
+    {
+        display.ShowErrorMarker();
+        std::cerr << "Error: Accessory input is empty." << std::endl;
+        return 1;
+    }
 
     auto accessory_prediction =
         accessory_classifier.Predict(accessory_input);
+    // Check if the accessory prediction is valid
+    if (accessory_prediction.predicted_class < 0 || accessory_prediction.predicted_class >= gesture::NUM_ACCESSORY_CLASSES)
+    {
+        display.ShowErrorMarker();
+        std::cerr << "Error: Invalid accessory prediction class index: "
+                  << accessory_prediction.predicted_class << std::endl;
+        return 1;
+    }
 
     Gesture player_gesture = Gesture::NEUTRAL;
 
     switch (gesture_prediction.predicted_class)
     {
         case gesture::ROCK:
-            player_gesture = Gesture::ROCK;
+            player_gesture = Gesture::ROCK; // index 2
             break;
 
         case gesture::PAPER:
-            player_gesture = Gesture::PAPER;
+            player_gesture = Gesture::PAPER; // index 1
             break;
 
         case gesture::SCISSORS:
-            player_gesture = Gesture::SCISSORS;
+            player_gesture = Gesture::SCISSORS; // index 3
             break;
 
         default:
-            player_gesture = Gesture::NEUTRAL;
+            player_gesture = Gesture::NEUTRAL; // index 0
             break;
     }
 
@@ -130,6 +193,28 @@ while (true)
         DeterminePiGesture(
             player_gesture,
             accessory_present);
+
+    // Log the predictions and accessory presence
+    std::cout
+    << "Human gesture = "
+    << GestureName(gesture_prediction.predicted_class)
+    << " (" << gesture_prediction.predicted_class << ")\n"
+
+    << "Accessory = "
+    << (accessory_present ? "PRESENT" : "ABSENT")
+    << " (" << accessory_prediction.predicted_class << ")\n"
+
+    << "Pi gesture = "
+    << GestureName(static_cast<int>(pi_gesture))
+    << " (" << static_cast<int>(pi_gesture) << ")\n"
+
+    << "Outcome = "
+    << (ComputeOutcome(accessory_present) == Outcome::WIN
+            ? "WIN"
+            : "LOSE")
+    << "\n"
+
+    << "-------------------------------------------------\n";
 
     // Display Pi's gesture on Sense HAT
     switch (pi_gesture)

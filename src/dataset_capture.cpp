@@ -4,6 +4,7 @@
 #include <filesystem>
 #include "RpiCameraCapture.hpp"
 #include "RgbFrameBmpExport.hpp"
+#include <iostream>
 
 int main(int argc, char **argv)
 {
@@ -31,15 +32,43 @@ int main(int argc, char **argv)
     rpicam::RpiCameraCapture camera(params);
 
     int collected = 0;
-    while (collected < 30)
-    {
-        auto frame = camera.currentFrame();
-        if (!frame) continue;
 
-        std::string filename = dir + label + "_" + member + "_" + run + "_" + std::to_string(frame_id++) + ".bmp";
+    while (true)
+    {
+        std::cout
+        << "\nPose: "
+        << label
+        << "\nPress ENTER when ready or 'exit' to quit\n";
+
+        std::string input;
+        std::getline(std::cin, input);
+
+        if (input == "exit")
+            break;
+
+        auto frame = camera.currentFrame();
+
+        if (!frame)
+        {
+            std::cout << "No frame available\n";
+            continue;
+        }
+
+        std::string filename =
+            dir +
+            label + "_" +
+            member + "_" +
+            run + "_" +
+            std::to_string(frame_id++) +
+            ".bmp";
+
         rpicam::saveRgbFrameAsBmp(frame, filename);
+
         ++collected;
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(800));
+        std::cout
+            << "Saved: "
+            << filename
+            << std::endl;
     }
 }

@@ -27,6 +27,7 @@ set(SHARED_SOURCES
   src/TfliteImageClassifier.cpp
   src/bmp_image.cpp
   src/sense_hat_display.cpp
+  src/game_logic.cpp
 )
 
 # Main inference binary
